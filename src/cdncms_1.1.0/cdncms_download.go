@@ -15,11 +15,14 @@ func DownloadMgmtInit(th_count uint32) *DownloadMgmt {
 		th_count = 1
 	}
 	mgmt.thread_num = th_count
-	mgmt.ch_task = make(chan string)
+	mgmt.ch_task = make(chan string, mgmt.thread_num)
 	return mgmt
 }
 
-func (this *DownloadMgmt) DownloadStart() {
+func (this *DownloadMgmt) DownloadStart() int {
+	for i := 0; i < this.th_count; i++ {
+		go work()
+	}
 }
 
 var taskdown_queue chan string
@@ -27,7 +30,7 @@ var taskdown_queue chan string
 func cen_content_download() {
 	taskdown_queue = make(chan string, Cf.Threadnum)
 	for i := 0; i < Cf.Threadnum; i++ {
-		go work(i)
+		go work()
 	}
 	for {
 		fmt.Println("Start download......................")
@@ -70,7 +73,7 @@ func cen_content_download() {
 	}
 }
 
-func work(i int) {
+func work() {
 	for {
 		fid := <-taskdown_queue
 		fmt.Println("add cen down task. fid:", fid)
