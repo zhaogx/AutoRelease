@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	. "utils"
 )
 
@@ -22,6 +23,42 @@ func DownloadMgmtInit(th_count uint32) *DownloadMgmt {
 func (this *DownloadMgmt) DownloadStart() int {
 	for i := 0; i < this.th_count; i++ {
 		go work()
+	}
+	for {
+		tmp = "select fid from content_notify_seek where status = 0 limit 0, ?"
+		stmt, err := mydb.Prepare(tmp)
+		if err != nil {
+			VLOG(VLOG_ERROR, "prepare failed![%s][%s]", tmp, err)
+			time.Sleep(time.Second * 10)
+			continue
+		}
+		res, err := stmt.Query(&this.th_count)
+		if err != nil {
+			VLOG(VLOG_ERROR, "query failed![%s][%s]", tmp, err)
+			stmt.Close()
+			time.Sleep(time.Second * 10)
+			continue
+		}
+		for res.Next() {
+			var fid string
+			err := res.Scan(&fid)
+			if err == nil {
+				//update
+				stmt2, err := mydb.Prepare("update content_notify_seek set status=1 where fid=?")
+				if err == nil {
+					_, err = stmt2.Exec(fid)
+					if err == nil {
+						taskdown_queue <- fid
+					}
+				}
+				stmt2.Close()
+			} else {
+				fmt.Println("Mysql scan err: ", err, fid)
+			}
+		}
+		stmt.Close()
+		time.Sleep(time.Second * 10)
+
 	}
 }
 
