@@ -1,0 +1,45 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+Queue	upload.py	/^import Queue$/;"	i
+UPLOAD_BODY	upload.py	/^UPLOAD_BODY = 'body'$/;"	v
+UPLOAD_HEADER	upload.py	/^UPLOAD_HEADER = 'header'$/;"	v
+VERSION	upload.py	/^VERSION = 12$/;"	v
+__init__	upload.py	/^    def __init__(self, root, filename):$/;"	m	class:file_info
+__init__	upload.py	/^    def __init__(self, threadname, taskqueue):$/;"	m	class:work_thd
+binascii	upload.py	/^import binascii$/;"	i
+checkupload	upload.py	/^def checkupload(olname, fpath):$/;"	f
+concurrency	upload.py	/^    concurrency = 20$/;"	v
+ctime	upload.py	/^from time import ctime,  time, sleep$/;"	i
+cur_file_dir	upload.py	/^def cur_file_dir():$/;"	f
+file_info	upload.py	/^class file_info:$/;"	c
+get_file_md5	upload.py	/^def get_file_md5(filename):$/;"	f
+handler	upload.py	/^handler = logging.FileHandler("%s\/%s.log" % (cur_file_dir(), os.path.splitext($/;"	v
+hashlib	upload.py	/^import hashlib$/;"	i
+logger	upload.py	/^logger = logging.getLogger()$/;"	v
+logging	upload.py	/^import logging$/;"	i
+main	upload.py	/^def main(path, concurrency):$/;"	f
+os	upload.py	/^import os$/;"	i
+path	upload.py	/^    path = sys.argv[1]$/;"	v
+pathdesc	upload.py	/^    pathdesc  = prex + 'mediadown-desc'$/;"	v
+pathdesc	upload.py	/^pathdesc  = ''$/;"	v
+patherror	upload.py	/^    patherror = prex + 'mediadown-error'$/;"	v
+patherror	upload.py	/^patherror = ''$/;"	v
+pos	upload.py	/^    pos = path.rfind('\/')$/;"	v
+prex	upload.py	/^    prex = path[:pos+1]$/;"	v
+run	upload.py	/^    def run(self):$/;"	m	class:work_thd
+senddata	upload.py	/^    def senddata(self, data, fpath, type):$/;"	m	class:work_thd
+sleep	upload.py	/^from time import ctime,  time, sleep$/;"	i
+socket	upload.py	/^import socket$/;"	i
+struct	upload.py	/^import struct$/;"	i
+subprocess	upload.py	/^import subprocess$/;"	i
+sys	upload.py	/^import sys$/;"	i
+task_proc	upload.py	/^    def task_proc(self, task):$/;"	m	class:work_thd
+threading	upload.py	/^import threading$/;"	i
+time	upload.py	/^from time import ctime,  time, sleep$/;"	i
+uploadbody	upload.py	/^    def uploadbody(self, fid, fpath):$/;"	m	class:work_thd
+uploadfile	upload.py	/^    def uploadfile(self, task):$/;"	m	class:work_thd
+work_thd	upload.py	/^class work_thd (threading.Thread):$/;"	c

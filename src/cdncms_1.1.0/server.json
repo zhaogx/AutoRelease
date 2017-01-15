@@ -1,0 +1,28 @@
+{
+	"host":   "127.0.0.1",
+	"port":   "8086", 
+	"URL" : "http://127.0.0.1:8086/notify?oldid=1&url=http://1.1.1.1/a.mp4&cpid=1111",
+	"Mysql" : [
+		{
+			"host": "10.177.1.21", 
+			"port": 3306, 
+			"user": "root", 
+			"password": "mysql*()", 
+			"name": "voole_cdn" 
+		}, 
+		{
+			"host": "1.1.1.2", 
+			"port": 3306, 
+			"user": "cdn", 
+			"password": "voole.com", 
+			"name": "voole_cdn" 
+		}
+	],
+	"vendown_name" : "/opt2/vendown/bin/vendown",
+	"Path" : "/opt2/ftproot/heilongjiang/",
+	"errcbhost" : "10.177.1.39",
+	"errcbport" : "38080",
+	"errcbhost_3rd" : "10.177.1.21",
+	"errcbport_3rd" : "9105",
+	"Threadnum"     : 10
+}
