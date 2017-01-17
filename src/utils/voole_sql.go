@@ -39,6 +39,24 @@ func VooleSqlInit(host string, port uint16, user string, pwd string, dbname stri
 	return mgmt, err
 }
 
-func VooleSqlQuery() {
-	return
+type VooleQueryCb func(*sql.Rows) int
+
+func (this *VooleSqlMgmt) VooleSqlQueryStmt(cb VooleQueryCb, sql string, args ...interface{}) error {
+	stmt, err := this.db.Prepare(sql)
+	defer stmt.Close()
+
+	if err != nil {
+		VLOG(VLOG_ERROR, "prepare failed![%s][%s]", sql, err)
+		return err
+	}
+
+	res, err := stmt.Query(args...)
+	defer res.Close()
+
+	if err != nil {
+		VLOG(VLOG_ERROR, "query failed![%s][%s]", sql, err)
+		return err
+	}
+	cb(res)
+	return err
 }

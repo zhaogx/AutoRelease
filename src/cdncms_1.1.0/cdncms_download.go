@@ -2,37 +2,52 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
+	"time"
 	. "utils"
 )
 
 type DownloadMgmt struct {
-	thread_num uint32      "download thread count"
-	ch_task    chan string "task channel"
+	ch_task chan string     "task channel"
+	conf    *DownLoadConfig "config"
+	db      *sql.DB         "sql connection"
 }
 
-func DownloadMgmtInit(th_count uint32) *DownloadMgmt {
+func DownloadMgmtInit() *DownloadMgmt {
 	mgmt := new(DownloadMgmt)
-	if th_count <= 0 {
-		th_count = 1
+
+	mgmt.conf = GetDownloadConfig(g_conf_mgmt)
+	if mgmt.conf == nil {
+		return nil
 	}
-	mgmt.thread_num = th_count
-	mgmt.ch_task = make(chan string, mgmt.thread_num)
+	fmt.Printf("+v\n", mgmt.conf)
+
+	dburl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
+		mgmt.conf.Mysql.User, mgmt.conf.Mysql.Password, mgmt.conf.Mysql.Host, mgmt.conf.Mysql.Port, mgmt.conf.Mysql.Name)
+	db, err := sql.Open("mysql", dburl)
+	if err != nil {
+		VLOG(VLOG_ERROR, "sql open failed:%s", dburl)
+		return nil
+	}
+	mgmt.db = db
+	mgmt.ch_task = make(chan string, mgmt.conf.Threadnum)
+
 	return mgmt
 }
 
 func (this *DownloadMgmt) DownloadStart() int {
-	for i := 0; i < this.th_count; i++ {
-		go work()
+	for i := 0; i < int(this.conf.Threadnum); i++ {
+		go work(this)
 	}
 	for {
-		tmp = "select fid from content_notify_seek where status = 0 limit 0, ?"
-		stmt, err := mydb.Prepare(tmp)
+		tmp := "select fid from content_notify_seek where status = 0 limit 0, ?"
+		stmt, err := this.db.Prepare(tmp)
 		if err != nil {
 			VLOG(VLOG_ERROR, "prepare failed![%s][%s]", tmp, err)
 			time.Sleep(time.Second * 10)
 			continue
 		}
-		res, err := stmt.Query(&this.th_count)
+		res, err := stmt.Query(&this.conf.Threadnum)
 		if err != nil {
 			VLOG(VLOG_ERROR, "query failed![%s][%s]", tmp, err)
 			stmt.Close()
@@ -44,60 +59,11 @@ func (this *DownloadMgmt) DownloadStart() int {
 			err := res.Scan(&fid)
 			if err == nil {
 				//update
-				stmt2, err := mydb.Prepare("update content_notify_seek set status=1 where fid=?")
+				stmt2, err := this.db.Prepare("update content_notify_seek set status=1 where fid=?")
 				if err == nil {
 					_, err = stmt2.Exec(fid)
 					if err == nil {
-						taskdown_queue <- fid
-					}
-				}
-				stmt2.Close()
-			} else {
-				fmt.Println("Mysql scan err: ", err, fid)
-			}
-		}
-		stmt.Close()
-		time.Sleep(time.Second * 10)
-
-	}
-}
-
-var taskdown_queue chan string
-
-func cen_content_download() {
-	taskdown_queue = make(chan string, Cf.Threadnum)
-	for i := 0; i < Cf.Threadnum; i++ {
-		go work()
-	}
-	for {
-		fmt.Println("Start download......................")
-		stmt, err := mydb.Prepare("select fid from content_notify_seek where status = 0 limit 0, ?")
-		if err != nil {
-			fmt.Println("mysql error:", err)
-			time.Sleep(time.Second * 10)
-			continue
-		}
-
-		res, err := stmt.Query(&Cf.Threadnum)
-		if err != nil {
-			fmt.Println("mysql error:", err)
-			stmt.Close()
-			time.Sleep(time.Second * 10)
-			continue
-		}
-
-		for res.Next() {
-			var (
-				fid string
-			)
-			err := res.Scan(&fid)
-			if err == nil {
-				//update
-				stmt2, err := mydb.Prepare("update content_notify_seek set status=1 where fid=?")
-				if err == nil {
-					_, err = stmt2.Exec(fid)
-					if err == nil {
-						taskdown_queue <- fid
+						this.ch_task <- fid
 					}
 				}
 				stmt2.Close()
@@ -110,11 +76,14 @@ func cen_content_download() {
 	}
 }
 
-func work() {
+func work(mgmt *DownloadMgmt) {
+	if mgmt == nil {
+		return
+	}
 	for {
-		fid := <-taskdown_queue
+		fid := <-mgmt.ch_task
 		fmt.Println("add cen down task. fid:", fid)
-		if cendownload(Cf.Path, fid) == true {
+		if cendownload(mgmt, fid) == true {
 			fmt.Println("found resource, fid:", fid)
 		} else {
 			fmt.Println("found resource failed, fid:", fid)
@@ -122,18 +91,25 @@ func work() {
 	}
 }
 
-func cendownload(savepath string, fid string) bool {
+func cendownload(mgmt *DownloadMgmt, fid string) bool {
+	//func cendownload(savepath string, fid string) bool {
+	if mgmt == nil {
+		return false
+	}
+	savepath := mgmt.conf.SavePath
+	listenpath := mgmt.conf.ListenPath
+
 	fmt.Println("Download: ", savepath, fid)
 	if len(fid) != 32 {
 		fmt.Println("#1.Fid error!")
 		return false
 	}
-	notify_status(42, fid)
+	notify_status(mgmt, 42, fid)
 
-	fname := down(savepath, fid)
+	fname := down(mgmt, fid)
 	if fname == "" {
 		fmt.Println("down() return false.", savepath, fid) //输出执行结果
-		notify_status(43, fid)
+		notify_status(mgmt, 43, fid)
 		return false
 	}
 	//	md5 := md5sum2(fname)
@@ -141,14 +117,14 @@ func cendownload(savepath string, fid string) bool {
 	if md5 != strings.ToLower(fid) {
 		fmt.Println("File md5 error, remove.md5:", md5, "fid:", fid, "fname:", fname)
 		os.Remove(fname)
-		notify_status(44, fid)
+		notify_status(mgmt, 44, fid)
 		return false
 	}
 
 	filesize := get_filesize(fname)
 
 	fmt.Println("======Download Successful. ", md5, fname, filesize)
-	notify_status(41, fid)
+	notify_status(mgmt, 41, fid)
 
 	stmt, err := mydb.Prepare("update content_notify_seek set filesize=?, status=11,md5=? where fid=?")
 	if err != nil {
@@ -164,7 +140,7 @@ func cendownload(savepath string, fid string) bool {
 	}
 	DownloadCount_cen = DownloadCount_cen + 1
 
-	newname := fmt.Sprintf("%s/%s.mp4", Cf.Listen_path, fid)
+	newname := fmt.Sprintf("%s/%s.mp4", listenpath, fid)
 	fmt.Println(fname, newname, "-------------------------")
 	os.Rename(fname, newname)
 
@@ -175,11 +151,16 @@ func cendownload(savepath string, fid string) bool {
 	return true
 }
 
-func down(savepath string, fid string) string {
+func down(mgmt *DownloadMgmt, fid string) string {
+	//func down(savepath string, fid string) string {
+	savepath := mgmt.conf.SavePath
+
+	vendown_name := mgmt.conf.VendownName
+
 	fname := fmt.Sprintf("%s/%s.mp4", savepath, fid)
 	fmt.Println(fname)
 
-	cmd := exec.Command(Cf.Vendown_name, "-d", "-o", fname, "-f", fid) //调用Command函数
+	cmd := exec.Command(vendown_name, "-d", "-o", fname, "-f", fid) //调用Command函数
 
 	var out bytes.Buffer //缓冲字节
 	cmd.Stdout = &out    //标准输出
@@ -191,4 +172,17 @@ func down(savepath string, fid string) string {
 	}
 	fmt.Printf("\n%s", out.String()) //输出执行结果
 	return fname
+}
+
+func notify_status(mgmt *DownloadMgmt, statuscode int, fid string) bool {
+
+	errUrl := fmt.Sprintf("http://%s:%s/freedom-PreViewInfo-errorws.action?mp4fid=%s&status=%d",
+		mgmt.conf.Errcbhost, mgmt.conf.Errcbport, fid, statuscode)
+	fmt.Println("%s", errUrl)
+	_, err := http.Get(errUrl)
+	if err != nil {
+		fmt.Println("Get error:", errUrl)
+		return false
+	}
+	return true
 }

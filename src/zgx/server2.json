@@ -1,0 +1,25 @@
+{
+	"WebServer":{
+		"host":   "127.0.0.1",
+		"port":   "8086", 
+		"bool":	true,
+		"thread_id":12.76,
+		"Mysql":{
+			"host": "10.177.1.21", 
+			"port": 3306, 
+			"user": "root", 
+			"password": "mysql*()", 
+			"name": "voole_cdn" 
+
+		},
+		"errcbhost_3rd" : "10.177.1.21",
+		"Threadnum"     : 10
+	},
+	"ScanServer":{
+		"host":"127.0.0.1",
+		"port":3399,
+		"path":"/opt/tmp"
+	}
+}
+
+

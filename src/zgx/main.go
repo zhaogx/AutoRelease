@@ -54,7 +54,63 @@ func tcp_client() {
 	return
 }
 
+type web_server_t struct {
+	/*
+		WebServer struct {
+			Host  string
+			Port  string
+			Bool  bool
+			Mysql struct {
+				Host     string
+				Port     uint16
+				User     string
+				Password string
+				Name     string
+			}
+			Errcbhost_3rd string
+			Threadnum     int
+		}
+	*/
+	ScanServer struct {
+		Host string
+		Port uint16
+		Path string
+	}
+}
+
 func main() {
+	/*
+		var web_server web_server_t
+		//var web_server map[string]interface{}
+		ReadConfig("server2.json", &web_server)
+		fmt.Println(web_server)
+		return
+	*/
+	cname := "server2.json"
+	conf_mgmt := VooleConfigInit(cname)
+	if conf_mgmt == nil {
+		fmt.Println("config init failed")
+	}
+	fmt.Println("====================================================================")
+	var result string
+	var f bool
+	var val_u32 uint32
+	var val_f32 float32
+	var val_f64 float64
+
+	result, f = conf_mgmt.GetString("WebServer", "host")
+	fmt.Println(result, f)
+	result, f = conf_mgmt.GetString("WebServer", "Mysql", "host")
+	fmt.Println(result, f)
+	val_u32, f = conf_mgmt.GetUint32("WebServer", "Threadnum")
+	fmt.Println(val_u32, f)
+
+	val_f32, f = conf_mgmt.GetFloat32("WebServer", "thread_id")
+	fmt.Println(val_f32, f)
+	val_f64, f = conf_mgmt.GetFloat64("WebServer", "thread_id")
+	fmt.Println(val_f64, f)
+
+	return
 	//socket test
 	lock := make(chan int)
 	go tcp_server()

@@ -1,14 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"net/http"
-	"os"
 	. "utils"
 )
 
-var conf CdncmsConfig
+var g_conf_mgmt *VooleConfigMgmt
 
 func main() {
 	var err error
@@ -16,13 +13,16 @@ func main() {
 	lock := make(chan int)
 	Vlog_init("./Log.json")
 
-	err = ReadConfig("server.json", conf)
-	if err != nil {
+	g_conf_mgmt := VooleConfigInit("server.json")
+	if g_conf_mgmt == nil {
 		VLOG(VLOG_ERROR, "Read config file %s error: ", err)
 		goto exit
 	}
 
 	//start download
+	down_mgmt := DownloadMgmtInit()
+	down_mgmt.DownloadStart()
+
 	//start web server
 	server := HttpInit()
 	server.HttpSetRouter("./seek", HttpSeekHandler)
