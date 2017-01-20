@@ -13,7 +13,6 @@ func main() {
 	Vlog_init("./Log.json")
 
 	ReadConfig("server.json", &conf)
-
 	VLOG_LINE(VLOG_ERROR, conf)
 
 	//start web server

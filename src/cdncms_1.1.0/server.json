@@ -2,20 +2,20 @@
 	"WebServer":{
 		"host"			: "127.0.0.1",
 		"port"			: "8086", 
-		"VendownName" 	: "/opt2/vendown/bin/vendown",
-		"ListenPath" 	: "/opt2/ftproot/heilongjiang/",
-		"SavePath" 		: "/opt2/ftproot/heilongjiang/",
-		"errcbhost" 	: "10.177.1.39",
+		"VendownName" 	: "/tmp/tools/voolestream.dbg",
+		"ListenPath" 	: "/tmp/path_mp4/",
+		"SavePath" 		: "/tmp/path_download/",
+		"errcbhost" 	: "888.888.888.888",
 		"errcbport" 	: "38080",
 		"Threadnum"     : 10,
-		"CheckInterval"	: 10,
+		"CheckInterval"	: 5,
 
 		"Mysql":{
-			"host"		: "10.177.1.21", 
+			"host"		: "10.5.6.155", 
 			"port"		: 3306, 
 			"user"		: "root", 
 			"password"	: "mysql*()", 
-			"name"		: "voole_cdn" 
+			"name"		: "voole" 
 		}
 	}
 }

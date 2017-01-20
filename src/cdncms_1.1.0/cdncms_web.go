@@ -49,7 +49,6 @@ func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
 		goto exit
 	}
 	return web, false
-
 exit:
 	return nil, false
 }

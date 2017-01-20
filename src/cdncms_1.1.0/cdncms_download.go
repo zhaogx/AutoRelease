@@ -60,6 +60,7 @@ func (this *DownloadMgmt) start() int {
 			VLOG(VLOG_ERROR, "%s[FAILED]", query)
 			goto next
 		}
+		VLOG(VLOG_MSG, "%s[SUCCEED]", query)
 		for rows.Next() {
 			var fid string
 			err := rows.Scan(&fid)
