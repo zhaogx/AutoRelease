@@ -3,6 +3,7 @@ package utils
 import (
 	"database/sql"
 	"fmt"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type VooleSqlMgmt struct {
@@ -14,7 +15,7 @@ type VooleSqlMgmt struct {
 	db     *sql.DB
 }
 
-func VooleSqlInit(host string, port uint16, user string, pwd string, dbname string) (*VooleSqlMgmt, error) {
+func VooleSqlInit(host string, port uint16, user, pwd, dbname string) (*VooleSqlMgmt, error) {
 	if port <= 0 {
 		port = 3306
 	}

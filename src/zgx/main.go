@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	. "utils"
@@ -79,13 +80,23 @@ type web_server_t struct {
 }
 
 func main() {
-	/*
-		var web_server web_server_t
-		//var web_server map[string]interface{}
-		ReadConfig("server2.json", &web_server)
-		fmt.Println(web_server)
-		return
-	*/
+
+	Vlog_init("Log.json")
+	var str_slice = []string{"hello", "test", "world"}
+	fmt.Println(str_slice)
+
+	tmp_str := strings.Join(str_slice, "")
+	fmt.Println(tmp_str)
+	return
+
+	var web_server web_server_t
+	//var web_server map[string]interface{}
+	ReadConfig("server2.json", &web_server)
+	fmt.Println(web_server)
+	st := fmt.Sprintln(web_server)
+	fmt.Println(st)
+	return
+
 	cname := "server2.json"
 	conf_mgmt := VooleConfigInit(cname)
 	if conf_mgmt == nil {

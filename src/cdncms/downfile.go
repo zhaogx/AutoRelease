@@ -81,7 +81,8 @@ func cen_content_download() {
 
 func notify_status(statuscode int, fid string) bool {
 
-	errUrl := fmt.Sprintf("http://%s:%s/freedom-PreViewInfo-errorws.action?mp4fid=%s&status=%d", Cf.Errcbhost, Cf.Errcbport, fid, statuscode)
+	errUrl := fmt.Sprintf("http://%s:%s/freedom-PreViewInfo-errorws.action?mp4fid=%s&status=%d",
+		Cf.Errcbhost, Cf.Errcbport, fid, statuscode)
 	fmt.Println("%s", errUrl)
 	_, err := http.Get(errUrl)
 	if err != nil {

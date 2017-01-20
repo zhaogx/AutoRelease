@@ -1,41 +1,26 @@
 package main
 
 import (
-	"net/http"
 	. "utils"
 )
 
-var g_conf_mgmt *VooleConfigMgmt
-
 func main() {
-	var err error
+	var conf ServerConfig
 
 	lock := make(chan int)
+	defer close(lock)
+
 	Vlog_init("./Log.json")
 
-	g_conf_mgmt := VooleConfigInit("server.json")
-	if g_conf_mgmt == nil {
-		VLOG(VLOG_ERROR, "Read config file %s error: ", err)
-		goto exit
-	}
+	ReadConfig("server.json", &conf)
 
-	//start download
-	down_mgmt := DownloadMgmtInit()
-	down_mgmt.DownloadStart()
+	VLOG_LINE(VLOG_ERROR, conf)
 
 	//start web server
-	server := HttpInit()
-	server.HttpSetRouter("./seek", HttpSeekHandler)
-	addr := conf.Host + ":" + conf.Port
-	err = server.HttpStart(addr)
-	if err != nil {
-		goto exit
-	}
-	<-lock
-exit:
-	return
-}
+	go CdncmsWebInit(&conf)
+	//start download
+	go DownloadMgmtInit(&conf)
 
-func HttpSeekHandler(w http.ResponseWriter, req *http.Request) {
+	<-lock
 	return
 }
