@@ -10,10 +10,11 @@ import (
 )
 
 type CdncmsWeb struct {
-	addr string         "listen addr"
-	s    *WebServer     "web server"
-	conf *WebServerConf "config"
-	db   *sql.DB        "sql connection"
+	addr  string         "listen addr"
+	s     *WebServer     "web server"
+	conf  *WebServerConf "config"
+	gconf *GlobalConf    "config"
+	db    *sql.DB        "sql connection"
 }
 
 func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
@@ -30,7 +31,12 @@ func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
 	web.conf = &conf.WebServer
 
 	dburl = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
-		web.conf.Mysql.User, web.conf.Mysql.Password, web.conf.Mysql.Host, web.conf.Mysql.Port, web.conf.Mysql.Name)
+		web.gconf.LocalSqlServer.User,
+		web.gconf.LocalSqlServer.Password,
+		web.gconf.LocalSqlServer.Host,
+		web.gconf.LocalSqlServer.Port,
+		web.gconf.LocalSqlServer.Name)
+
 	db, err = sql.Open("mysql", dburl)
 	if err != nil {
 		VLOG(VLOG_ERROR, "sql open failed:%s", dburl)

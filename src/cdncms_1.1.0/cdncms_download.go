@@ -14,6 +14,7 @@ import (
 type DownloadMgmt struct {
 	ch_task chan string    "task channel"
 	db      *sql.DB        "sql connection"
+	gconf   *GlobalConf    "global config"
 	conf    *WebServerConf "config"
 }
 
@@ -23,11 +24,17 @@ func DownloadMgmtInit(pconf *ServerConfig) *DownloadMgmt {
 	}
 	mgmt := new(DownloadMgmt)
 
+	mgmt.gconf = &pconf.Global
 	mgmt.conf = &pconf.WebServer
 	mgmt.init_conf()
 
 	dburl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
-		mgmt.conf.Mysql.User, mgmt.conf.Mysql.Password, mgmt.conf.Mysql.Host, mgmt.conf.Mysql.Port, mgmt.conf.Mysql.Name)
+		mgmt.gconf.LocalSqlServer.User,
+		mgmt.gconf.LocalSqlServer.Password,
+		mgmt.gconf.LocalSqlServer.Host,
+		mgmt.gconf.LocalSqlServer.Port,
+		mgmt.gconf.LocalSqlServer.Name)
+
 	db, err := sql.Open("mysql", dburl)
 	if err != nil {
 		VLOG(VLOG_ERROR, "sql open failed:%s", dburl)
@@ -65,7 +72,7 @@ func (this *DownloadMgmt) start() int {
 			var fid string
 			err := rows.Scan(&fid)
 			if err != nil {
-				VLOG(VLOG_ERROR, "Mysql scan error [%s] [%s]", fid, err.Error())
+				VLOG(VLOG_ERROR, "LocalSqlServer scan error [%s] [%s]", fid, err.Error())
 				continue
 			}
 			//update status
@@ -99,8 +106,8 @@ func cendownload(mgmt *DownloadMgmt, fid string) bool {
 	if mgmt == nil {
 		return false
 	}
-	savepath := mgmt.conf.SavePath
-	listenpath := mgmt.conf.ListenPath
+	savepath := mgmt.gconf.WebServerBaseDir
+	listenpath := mgmt.gconf.ShotServerBaseDir
 	vendown_name := mgmt.conf.VendownName
 
 	VLOG(VLOG_MSG, "Prepare Download [%s][%s]", savepath, fid)
@@ -115,7 +122,6 @@ func cendownload(mgmt *DownloadMgmt, fid string) bool {
 	err := cmd.Run()
 	if err != nil {
 		VLOG_LINE(VLOG_ERROR, cmd.Args)
-
 		notify_status(mgmt, 43, fid)
 		return false
 	}

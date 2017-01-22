@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	_ "strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -79,9 +81,20 @@ type web_server_t struct {
 	}
 }
 
+func WalkFunc(path string, info os.FileInfo, err error) error {
+	fmt.Println(path, info.Name(), info.IsDir())
+	return err
+}
+
 func main() {
 
 	Vlog_init("Log.json")
+	{
+		os.RemoveAll("test*")
+	}
+	return
+	filepath.Walk("/tmp", WalkFunc)
+	return
 	var str_slice = []string{"hello", "test", "world"}
 	fmt.Println(str_slice)
 
