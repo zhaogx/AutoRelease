@@ -29,6 +29,7 @@ func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
 	}
 	web = new(CdncmsWeb)
 	web.conf = &conf.WebServer
+	web.gconf = &conf.Global
 
 	dburl = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
 		web.gconf.LocalSqlServer.User,
@@ -46,9 +47,9 @@ func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
 	web.addr = web.conf.Host + ":" + web.conf.Port
 	web.s = HttpInit()
 
-	httpSeekHandler = web.getHandler("./seek")
+	httpSeekHandler = web.getHandler("/seek")
 
-	web.s.HttpSetRouter("./seek", httpSeekHandler)
+	web.s.HttpSetRouter("/seek", httpSeekHandler)
 
 	err = web.s.HttpStart(web.addr)
 	if err == nil {
@@ -62,7 +63,7 @@ exit:
 func (this *CdncmsWeb) getHandler(pattern string) RouterHandleFunc {
 
 	switch pattern {
-	case "./seek":
+	case "/seek":
 		return func(w http.ResponseWriter, req *http.Request) {
 			var fid string = ""
 			var format int = 7

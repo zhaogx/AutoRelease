@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	. "utils"
 )
 
@@ -16,6 +18,8 @@ type CdncmsShotMgmt struct {
 	gconf    *GlobalConf     "global config"
 	conf     *ShotServerConf "config"
 	local_db *sql.DB         "sql connection"
+	task_ch  chan string     "task chan"
+	//增加一个请求列表 避免1个文件被多次遍历到
 }
 
 func CdncmsShotMgmtInit(pconf *ServerConfig) bool {
@@ -40,9 +44,29 @@ func CdncmsShotMgmtInit(pconf *ServerConfig) bool {
 		VLOG(VLOG_ERROR, "sql open failed:%s", dburl)
 		return false
 	}
+	VLOG(VLOG_MSG, "sql open succeed [%s]", dburl)
 	mgmt.local_db = db
+	mgmt.task_ch = make(chan string)
 
+	mgmt.init_conf()
+	mgmt.start()
 	return false
+}
+
+func cdncmsShotWorkThread(mgmt *CdncmsShotMgmt) error {
+	if mgmt == nil {
+		return nil
+	}
+	fid := <-mgmt.task_ch
+	full_name := mgmt.gconf.ShotServerBaseDir + "/mp4/" + fid + ".mp4"
+
+	e := mgmt.picture_shot(fid, "-a", full_name, "160*90", "2", "10")
+	if e != nil {
+		VLOG(VLOG_ERROR, "%s", e.Error())
+		return e
+	}
+	//update db
+	return nil
 }
 
 func (this *CdncmsShotMgmt) init_conf() {
@@ -54,8 +78,21 @@ func (this *CdncmsShotMgmt) start() int {
 	tx.Exec("update FileUploadResult set gl='0' where gl='9'")
 	tx.Commit()
 
-	handler := this.walk_func()
-	filepath.Walk(this.gconf.ShotServerBaseDir, handler)
+	var i uint32
+	for i = 0; i < this.conf.Threadnum; i++ {
+		go cdncmsShotWorkThread(this)
+	}
+
+	dir := this.gconf.ShotServerBaseDir + "/mp4"
+	for {
+		handler := this.walk_func()
+		filepath.Walk(dir, handler)
+
+		info, err := ioutil.ReadDir(dir)
+		if len(info) == 0 || err != nil {
+			time.Sleep(time.Second * 5)
+		}
+	}
 	return 0
 }
 
@@ -65,31 +102,32 @@ func (this *CdncmsShotMgmt) walk_func() filepath.WalkFunc {
 			return nil
 		}
 		//handle file
+		VLOG(VLOG_MSG, "ShotServer prepare handle [%s]", path)
 		if info.Size() <= 0 {
 			s := fmt.Sprintf("File size error[%s][%d]", info.Name(), info.Size())
+			VLOG(VLOG_ERROR, "%s", s)
 			return errors.New(s)
 		}
 		name_slice := strings.Split(info.Name(), ".")
 		if len(name_slice) <= 1 {
 			s := fmt.Sprintf("File name error[%s]", info.Name())
+			VLOG(VLOG_ERROR, "%s", s)
 			return errors.New(s)
 		}
 		if false == strings.EqualFold(name_slice[len(name_slice)-1], "mp4") {
 			s := fmt.Sprintf("File name error[%s]", info.Name())
+			VLOG(VLOG_ERROR, "%s", s)
 			return errors.New(s)
 		}
 
 		mp4_fid := name_slice[0]
 		if len(mp4_fid) != 32 || strings.EqualFold(mp4_fid, "d41d8cd98f00b204e9800998ecf8427e") {
 			s := fmt.Sprintf("File mp4_fid error[%s]", mp4_fid)
+			VLOG(VLOG_ERROR, "%s", s)
 			return errors.New(s)
 		}
 
-		e := this.picture_shot(mp4_fid, "-a", path, "160*90", "2", "10")
-		if e != nil {
-			return e
-		}
-		//update db
+		this.task_ch <- mp4_fid
 		return nil
 	}
 }
@@ -98,6 +136,7 @@ func (this *CdncmsShotMgmt) picture_shot(fid, style, video_name, resolution, qua
 
 	var err error
 	var i int
+	var cmd_str string
 
 	//param check
 	var e error
@@ -131,9 +170,10 @@ func (this *CdncmsShotMgmt) picture_shot(fid, style, video_name, resolution, qua
 		return errors.New(s)
 	}
 
-	//["-a",file,"160*90", "2", "10"]
-	o, _ := exec.Command(this.conf.FfmpegPath, "-i", video_name).Output()
+	cmd_str = fmt.Sprintf("%s -i %s", this.conf.FfmpegPath, video_name)
+	o, _ := exec.Command("/bin/sh", "-c", cmd_str).CombinedOutput()
 	out := string(o)
+
 	dur_str := "Duration: "
 	i = strings.Index(out, dur_str)
 	if i < 0 {
@@ -145,21 +185,21 @@ func (this *CdncmsShotMgmt) picture_shot(fid, style, video_name, resolution, qua
 	hour, _ := strconv.Atoi(slice[0])
 	min, _ := strconv.Atoi(slice[1])
 	sec, _ := strconv.Atoi(slice[2])
-
 	sum := hour*3600 + min*60 + sec
+
+	VLOG(VLOG_MSG, "duration:[%s], [%d:%d:%d] [sum:%d]", t, hour, min, sec, sum)
 
 	i = 0
 	succeed := 1
 
-	os.Mkdir("tmp", 0777)
-
-	prefix := "./tmp/" + fid
-	files := prefix + "_*"
+	shot_dir := fmt.Sprintf("./%s", fid)
+	os.Mkdir(shot_dir, 0777)
+	prefix := shot_dir + "/" + fid
 
 	for i < sum {
-		//./ffmpeg -ss 10 -i 5c3f6fcd49941b6c304ebe6c76effc4a.mp4 -y -f image2 -q:v 2 -y -t 0.01 -s 160*90 ./5c3f6fcd49941b6c304ebe6c76effc4a.jpg
 		pic := prefix + "_" + strconv.Itoa(i) + ".jpg"
-		cmd := exec.Command(this.conf.FfmpegPath, "-ss", strconv.Itoa(i), "-i", video_name, "-y", "-f", "image2", "-q:v", quality, "-y", "-t", "0.01", "-s", resolution, pic)
+		cmd_str = fmt.Sprintf("%s -ss %d -i %s -y -f image2 -q:v %s -y -t 0.01 -s %s %s", this.conf.FfmpegPath, i, video_name, quality, resolution, pic)
+		cmd := exec.Command("/bin/sh", "-c", cmd_str)
 		err = cmd.Run()
 		if err != nil {
 			succeed = 0
@@ -170,14 +210,27 @@ func (this *CdncmsShotMgmt) picture_shot(fid, style, video_name, resolution, qua
 	}
 
 	if succeed == 1 {
-		tar_name := prefix + ".tar.gz"
-		cmd := exec.Command("tar", "zcvf", tar_name, files)
+		source_name := prefix + ".tar.gz"
+		cmd_str = fmt.Sprintf("tar zcvf %s %s*", source_name, prefix)
+		cmd := exec.Command("/bin/sh", "-c", cmd_str)
 		err = cmd.Run()
 		if err == nil {
-			new_name := this.conf.ShotPath + "/" + fid + ".mp4.shot"
-			os.Rename(tar_name, new_name)
+			VLOG(VLOG_MSG, "[%s] succeed.", cmd_str)
+			new_name := this.gconf.ShotServerBaseDir + "/shot/" + "/" + fid + ".mp4.shot"
+			os.Rename(source_name, new_name)
+			VLOG(VLOG_MSG, "Rename succeed.[%s]->[%s]", source_name, new_name)
+
+			source_name = video_name
+			new_name = this.gconf.ShotServerBaseDir + "/back/" + "/" + fid + ".mp4"
+			os.Rename(source_name, new_name)
+			VLOG(VLOG_MSG, "Rename succeed.[%s]->[%s]", source_name, new_name)
 		}
 	}
-	exec.Command("rm", "-rf", files).Output()
+	cmd_str = fmt.Sprintf("rm -rf %s", shot_dir)
+	o, err = exec.Command("/bin/sh", "-c", cmd_str).CombinedOutput()
+	if err != nil {
+		VLOG(VLOG_ERROR, "[%s] failed.[%s][%s]", cmd_str, string(o), err.Error())
+	}
+	VLOG(VLOG_MSG, "[%s] succeed.", cmd_str)
 	return err
 }

@@ -62,7 +62,6 @@ func cen_content_download() {
 					}
 				}
 				stmt2.Close()
-
 				/*
 					//syc
 					fmt.Println("add cen down task. fid:", fid)

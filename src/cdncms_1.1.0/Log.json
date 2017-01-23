@@ -1,6 +1,6 @@
 {
-	"Log_level":4,
-	"Log_path":"./syslog"
+	"Log_level"	:4,
+	"Log_path"	:"./syslog"
 }
 /*
  *1:ERROR

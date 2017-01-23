@@ -106,8 +106,8 @@ func cendownload(mgmt *DownloadMgmt, fid string) bool {
 	if mgmt == nil {
 		return false
 	}
-	savepath := mgmt.gconf.WebServerBaseDir
-	listenpath := mgmt.gconf.ShotServerBaseDir
+	savepath := mgmt.gconf.WebServerBaseDir + "/download/"
+	listenpath := mgmt.gconf.ShotServerBaseDir + "/mp4/"
 	vendown_name := mgmt.conf.VendownName
 
 	VLOG(VLOG_MSG, "Prepare Download [%s][%s]", savepath, fid)
@@ -118,10 +118,12 @@ func cendownload(mgmt *DownloadMgmt, fid string) bool {
 	notify_status(mgmt, 42, fid)
 
 	fname := fmt.Sprintf("%s/%s.mp4", savepath, fid)
-	cmd := exec.Command(vendown_name, "-d", "-o", fname, "-f", fid) //调用Command函数
+
+	cmd_str := fmt.Sprintf("%s -d -o %s -f %s", vendown_name, fname, fid)
+	cmd := exec.Command("/bin/sh", "-c", cmd_str) //调用Command函数
 	err := cmd.Run()
 	if err != nil {
-		VLOG_LINE(VLOG_ERROR, cmd.Args)
+		VLOG(VLOG_ERROR, "[%s] failed. [%s]", cmd_str, err.Error())
 		notify_status(mgmt, 43, fid)
 		return false
 	}

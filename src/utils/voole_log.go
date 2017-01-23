@@ -11,6 +11,7 @@ import (
 
 const (
 	VLOG_CLOSE = iota
+	VLOG_ALTER
 	VLOG_ERROR
 	VLOG_WARNNING
 	VLOG_MSG
@@ -19,6 +20,7 @@ const (
 
 var log_level_str = []string{
 	"",
+	"ALTER",
 	"ERROR",
 	"WARNNING",
 	"MSG",
@@ -127,7 +129,7 @@ func log_prefix(level int) (string, bool) {
 			return "", false
 		}
 	}
-	_, file, line, _ := runtime.Caller(1)
+	_, file, line, _ := runtime.Caller(2)
 	array := strings.Split(file, "/")
 	file = array[len(array)-1]
 
