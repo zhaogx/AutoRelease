@@ -17,7 +17,7 @@ type CdncmsWeb struct {
 	db    *sql.DB        "sql connection"
 }
 
-func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
+func CdncmsWebInit(conf *ServerConfig, ret chan bool) {
 	var db *sql.DB
 	var err error
 	var dburl string
@@ -25,7 +25,8 @@ func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
 	var httpSeekHandler RouterHandleFunc
 
 	if conf == nil {
-		return nil, false
+		ret <- false
+		return
 	}
 	web = new(CdncmsWeb)
 	web.conf = &conf.WebServer
@@ -44,20 +45,24 @@ func CdncmsWebInit(conf *ServerConfig) (*CdncmsWeb, bool) {
 		goto exit
 	}
 	web.db = db
+
 	web.addr = web.conf.Host + ":" + web.conf.Port
 	web.s = HttpInit()
 
 	httpSeekHandler = web.getHandler("/seek")
-
 	web.s.HttpSetRouter("/seek", httpSeekHandler)
-
 	err = web.s.HttpStart(web.addr)
 	if err == nil {
 		goto exit
 	}
-	return web, false
+	ret <- true
+	return
 exit:
-	return nil, false
+	if web.db != nil {
+		web.db.Close()
+	}
+	ret <- false
+	return
 }
 
 func (this *CdncmsWeb) getHandler(pattern string) RouterHandleFunc {

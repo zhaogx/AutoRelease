@@ -1,13 +1,30 @@
 {
 	"Global":{
-		"WebServerBaseDir"	:"/tmp/web_server/",
-		"ShotServerBaseDir" :"/tmp/shot_server/",
+		"PLATERRORINTERFACE"	:"http://10.177.1.231:8080/freedom-PreViewInfo-errorws.action?",
+		"PLATINTERFACE" 		:"http://10.177.1.231:8080/freedom-PreViewInfo-ws.action?",
+		"WebServerBaseDir"		:"/tmp/web_server/",
+		"ShotServerBaseDir" 	:"/tmp/shot_server/",
+		"UploadServerBaseDir" 	:"/tmp/upload_server/",
 		"LocalSqlServer" :{
 			"host"		: "10.5.6.155", 
 			"port"		: 3306, 
 			"user"		: "root", 
 			"password"	: "mysql*()", 
 			"name"		: "voole" 
+		},
+		"GlCenSqlServer" :{
+			"host"		: "10.5.6.155", 
+			"port"		: 3306, 
+			"user"		: "root", 
+			"password"	: "mysql*()", 
+			"name"		: "voole_cdn" 
+		},
+		"OnLineSqlServer":{
+			"host"		: "10.5.6.155", 
+			"port"		: 3306, 
+			"user"		: "root", 
+			"password"	: "mysql*()", 
+			"name"		: "voole_cdn" 
 		}
 	},
 	"WebServer":{
@@ -21,6 +38,13 @@
 	},
 	"ShotServer":{	
 		"FfmpegPath" 	:"/tmp/tools/ffmpeg",
-		"Threadnum"     : 10
+		"Threadnum"     : 10,
+		"LoopInterval"	: 3
+	},
+	"UploadServer":{
+		"VendownName" 	: "/tmp/tools/voolestream.dbg",
+		"Threadnum"     : 10,
+		"LoopInterval"	: 3
 	}
 }
+

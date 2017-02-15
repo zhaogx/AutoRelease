@@ -4,99 +4,165 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	. "utils"
 )
 
 type CdncmsShotMgmt struct {
-	gconf    *GlobalConf     "global config"
-	conf     *ShotServerConf "config"
-	local_db *sql.DB         "sql connection"
-	task_ch  chan string     "task chan"
+	gconf     *GlobalConf     "global config"
+	conf      *ShotServerConf "config"
+	db_local  *sql.DB         "sql connection"
+	db_cen    *sql.DB         "sql connection"
+	db_online *sql.DB         "sql connection"
+	task_ch   chan string     "task chan"
+
 	//增加一个请求列表 避免1个文件被多次遍历到
+	mutex    sync.Mutex
+	file_map map[string]bool "file list"
 }
 
-func CdncmsShotMgmtInit(pconf *ServerConfig) bool {
+func CdncmsShotMgmtInit(pconf *ServerConfig, ret chan bool) {
+	var err error
+
 	if pconf == nil {
-		return false
+		ret <- false
+		return
 	}
 	mgmt := new(CdncmsShotMgmt)
 
 	mgmt.gconf = &pconf.Global
 	mgmt.conf = &pconf.ShotServer
-	mgmt.init_conf()
 
-	dburl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
-		mgmt.gconf.LocalSqlServer.User,
-		mgmt.gconf.LocalSqlServer.Password,
-		mgmt.gconf.LocalSqlServer.Host,
-		mgmt.gconf.LocalSqlServer.Port,
-		mgmt.gconf.LocalSqlServer.Name)
-
-	db, err := sql.Open("mysql", dburl)
+	mgmt.db_local, err = mgmt.initDb(&mgmt.gconf.LocalSqlServer)
 	if err != nil {
-		VLOG(VLOG_ERROR, "sql open failed:%s", dburl)
-		return false
+		ret <- false
+		return
 	}
-	VLOG(VLOG_MSG, "sql open succeed [%s]", dburl)
-	mgmt.local_db = db
+	mgmt.db_cen, err = mgmt.initDb(&mgmt.gconf.GlCenSqlServer)
+	if err != nil {
+		mgmt.db_local.Close()
+		ret <- false
+		return
+	}
+	mgmt.db_online, err = mgmt.initDb(&mgmt.gconf.OnLineSqlServer)
+	if err != nil {
+		mgmt.db_local.Close()
+		mgmt.db_cen.Close()
+		ret <- false
+		return
+	}
+
 	mgmt.task_ch = make(chan string)
+	mgmt.file_map = make(map[string]bool)
 
 	mgmt.init_conf()
 	mgmt.start()
-	return false
+	ret <- true
+	return
 }
 
-func cdncmsShotWorkThread(mgmt *CdncmsShotMgmt) error {
-	if mgmt == nil {
-		return nil
+func (this *CdncmsShotMgmt) init_conf() {
+	if this.conf.Threadnum <= 0 {
+		this.conf.Threadnum = 1
 	}
-	fid := <-mgmt.task_ch
-	full_name := mgmt.gconf.ShotServerBaseDir + "/mp4/" + fid + ".mp4"
+	if this.conf.LoopInterval <= 0 {
+		this.conf.LoopInterval = 3
+	}
+	return
+}
 
-	e := mgmt.picture_shot(fid, "-a", full_name, "160*90", "2", "10")
+func (this *CdncmsShotMgmt) initDb(pconf *SqlServerConf) (*sql.DB, error) {
+	if pconf == nil {
+		return nil, errors.New("init db. pconf is nil")
+	}
+
+	dburl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
+		pconf.User, pconf.Password, pconf.Host, pconf.Port, pconf.Name)
+
+	db, err := sql.Open("mysql", dburl)
+	if err != nil {
+		VLOG(VLOG_ERROR, "sql open failed:%s[%s]", dburl, err.Error())
+		return nil, err
+	}
+	VLOG(VLOG_MSG, "sql open succeed [%s]", dburl)
+	return db, err
+}
+
+func (this *CdncmsShotMgmt) workThread() error {
+	mp4_fid := <-this.task_ch
+	defer func() {
+		this.mutex.Lock()
+		delete(this.file_map, mp4_fid)
+		this.mutex.Unlock()
+	}()
+
+	full_name := this.gconf.ShotServerBaseDir + "/mp4/" + mp4_fid + ".mp4"
+
+	e := this.picture_shot(mp4_fid, "-a", full_name, "160*90", "2", "10")
 	if e != nil {
 		VLOG(VLOG_ERROR, "%s", e.Error())
 		return e
 	}
+
 	//update db
+	e = this.update_db(mp4_fid)
+	if e != nil {
+		VLOG(VLOG_ERROR, "update db failed.mp4fid:[%s], error:[%s]", mp4_fid, e.Error())
+		return e
+	}
+
+	shot_name := this.gconf.ShotServerBaseDir + "/shot/" + mp4_fid + ".mp4.shot"
+	shot_fid := md5sum(shot_name)
+	dst_name := this.gconf.UploadServerBaseDir + "/waitting/" + shot_fid + ".shot"
+	os.Rename(shot_name, dst_name)
+	VLOG(VLOG_MSG, "Rename succeed.[%s]->[%s]", shot_name, dst_name)
+
 	return nil
 }
 
-func (this *CdncmsShotMgmt) init_conf() {
-	return
+func (this *CdncmsShotMgmt) taskDistribute() error {
+	var mp4_fid string
+	for {
+		mp4_fid = ""
+		this.mutex.Lock()
+		for k, v := range this.file_map {
+			if v == false {
+				mp4_fid = k
+				break
+			}
+		}
+		this.mutex.Unlock()
+		if len(mp4_fid) == 32 {
+			this.task_ch <- mp4_fid
+		} else {
+			time.Sleep(time.Second)
+		}
+	}
 }
 
 func (this *CdncmsShotMgmt) start() int {
-	tx, _ := this.local_db.Begin()
-	tx.Exec("update FileUploadResult set gl='0' where gl='9'")
-	tx.Commit()
-
 	var i uint32
 	for i = 0; i < this.conf.Threadnum; i++ {
-		go cdncmsShotWorkThread(this)
+		go this.workThread()
 	}
+	go this.taskDistribute()
 
 	dir := this.gconf.ShotServerBaseDir + "/mp4"
 	for {
-		handler := this.walk_func()
+		handler := this.walk_handler()
 		filepath.Walk(dir, handler)
-
-		info, err := ioutil.ReadDir(dir)
-		if len(info) == 0 || err != nil {
-			time.Sleep(time.Second * 5)
-		}
+		time.Sleep(time.Second * time.Duration(this.conf.LoopInterval))
 	}
 	return 0
 }
 
-func (this *CdncmsShotMgmt) walk_func() filepath.WalkFunc {
+func (this *CdncmsShotMgmt) walk_handler() filepath.WalkFunc {
 	return func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() == true {
 			return nil
@@ -126,14 +192,17 @@ func (this *CdncmsShotMgmt) walk_func() filepath.WalkFunc {
 			VLOG(VLOG_ERROR, "%s", s)
 			return errors.New(s)
 		}
-
-		this.task_ch <- mp4_fid
+		//insert map
+		this.mutex.Lock()
+		if _, ok := this.file_map[mp4_fid]; ok == false {
+			this.file_map[mp4_fid] = false
+		}
+		this.mutex.Unlock()
 		return nil
 	}
 }
 
 func (this *CdncmsShotMgmt) picture_shot(fid, style, video_name, resolution, quality, interval string) error {
-
 	var err error
 	var i int
 	var cmd_str string
@@ -220,17 +289,132 @@ func (this *CdncmsShotMgmt) picture_shot(fid, style, video_name, resolution, qua
 			os.Rename(source_name, new_name)
 			VLOG(VLOG_MSG, "Rename succeed.[%s]->[%s]", source_name, new_name)
 
-			source_name = video_name
 			new_name = this.gconf.ShotServerBaseDir + "/back/" + "/" + fid + ".mp4"
-			os.Rename(source_name, new_name)
-			VLOG(VLOG_MSG, "Rename succeed.[%s]->[%s]", source_name, new_name)
+			os.Rename(video_name, new_name)
+			VLOG(VLOG_MSG, "Rename succeed.[%s]->[%s]", video_name, new_name)
 		}
 	}
-	cmd_str = fmt.Sprintf("rm -rf %s", shot_dir)
-	o, err = exec.Command("/bin/sh", "-c", cmd_str).CombinedOutput()
+
+	err = os.RemoveAll(shot_dir)
 	if err != nil {
-		VLOG(VLOG_ERROR, "[%s] failed.[%s][%s]", cmd_str, string(o), err.Error())
+		VLOG(VLOG_ERROR, "Remove file [%s] failed.[%s]", shot_dir, err.Error())
+	} else {
+		VLOG(VLOG_ERROR, "Remove file [%s] succeed.", shot_dir)
 	}
-	VLOG(VLOG_MSG, "[%s] succeed.", cmd_str)
 	return err
+}
+
+func (this *CdncmsShotMgmt) select_db(mp4_fid string) (*sql.DB, error) {
+
+	if len(mp4_fid) != 32 {
+		return nil, fmt.Errorf("select_db fid len(%d) != 32", len(mp4_fid))
+	}
+
+	query := fmt.Sprintf("select fid from resource where fid = '%s'", mp4_fid)
+	rows, err := this.db_cen.Query(query)
+	if err != nil {
+		VLOG(VLOG_ERROR, "%s[FAILED]", query)
+	} else {
+		flag := rows.Next()
+		rows.Close()
+		if flag {
+			return this.db_cen, nil
+		}
+	}
+
+	rows, err = this.db_online.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("[%s][FAILED]", query)
+	} else {
+		flag := rows.Next()
+		rows.Close()
+		if flag {
+			return this.db_online, nil
+		}
+	}
+	return nil, fmt.Errorf("[%s] can not found %s from resource", query)
+}
+
+func (this *CdncmsShotMgmt) commit_db(db *sql.DB, query string) {
+	if db == nil || len(query) <= 0 {
+		VLOG(VLOG_ERROR, "commit_db failed")
+		return
+	}
+	tx, _ := db.Begin()
+	_, err := tx.Exec(query)
+	tx.Commit()
+	if err != nil {
+		VLOG(VLOG_ERROR, "[%s][%s]", query, err.Error())
+	} else {
+		VLOG(VLOG_MSG, "[%s]", query)
+	}
+}
+
+func (this *CdncmsShotMgmt) update_db(mp4_fid string) error {
+
+	if len(mp4_fid) != 32 {
+		return fmt.Errorf("[update_db][mp4_fid len error][%d][%s]", len(mp4_fid), mp4_fid)
+	}
+	db, err := this.select_db(mp4_fid)
+	if err != nil {
+		return err
+	}
+
+	shot_base_name := mp4_fid + ".mp4.shot"
+	shot_full_name := this.gconf.ShotServerBaseDir + "/shot/" + mp4_fid + ".mp4.shot"
+	shot_fid := md5sum(shot_full_name)
+	if len(shot_fid) <= 0 {
+		return fmt.Errorf("Get md5 failed[%s]", shot_full_name)
+	}
+	filesize := get_filesize(shot_full_name)
+
+	query := fmt.Sprintf("select fid from resource where fid = '%s'", shot_fid)
+	rows, err := db.Query(query)
+	if err != nil {
+		return fmt.Errorf("%s[FAILED][shot_fullname:%s]", query, shot_full_name)
+	} else {
+		if rows.Next() {
+			query = fmt.Sprintf("update resource set mp4fid = '%s',rawname = '%s' where fid = '%s'",
+				mp4_fid, shot_base_name, shot_fid)
+		} else {
+			query = fmt.Sprintf("insert into resource (fid, rawname, format, inode, filesize, status, mp4fid, ErrorCode) values('%s', '%s', %d, %d, %d, %d, '%s', 10)",
+				shot_fid, shot_base_name, 20, 1234567888, filesize, 20, mp4_fid)
+		}
+		rows.Close()
+	}
+
+	this.commit_db(db, query)
+
+	query = fmt.Sprintf("update resource set preview = '%s' where fid = '%s' and format = 7",
+		shot_fid, mp4_fid)
+	this.commit_db(db, query)
+
+	var VideoRate, MoovOffset, Duration, TotalBitrate, VideoFPS, AudioFPS, AudioRate int32
+	var SegIndex, Proprietary, Container, Resolution, AudioCodec, VideoCodec, rawname, iseq, MediaName, CPID string
+	query = fmt.Sprintf("select VideoRate, MoovOffset, SegIndex, Proprietary, Duration,"+
+		" Container, TotalBitrate, Resolution, AudioCodec, VideoCodec, VideoFPS,"+
+		" AudioFPS, AudioRate, rawname, iseq,MediaName,CPID from resource where fid = '%s'",
+		mp4_fid)
+	rows, err = db.Query(query)
+	if err != nil {
+		return fmt.Errorf("%s[FAILED][shot_fullname:%s]", query, shot_full_name)
+	} else {
+		for rows.Next() {
+			err = rows.Scan(
+				&VideoRate, &MoovOffset, &SegIndex, &Proprietary,
+				&Duration, &Container, &TotalBitrate, &Resolution,
+				&AudioCodec, &VideoCodec, &VideoFPS, &AudioFPS,
+				&AudioRate, &rawname, &iseq, &MediaName, &CPID)
+			break
+		}
+		rows.Close()
+	}
+
+	query = fmt.Sprintf("update resource set VideoRate = %d, MoovOffset =%d, SegIndex='%s', Proprietary = '%s', Duration = %d, Container = '%s', TotalBitrate = %d, Resolution = '%s', AudioCodec = '%s', VideoCodec = '%s', VideoFPS = '%d', AudioFPS = '%d', AudioRate = '%d', rawname = '%s.shot', iseq='%s', MediaName='%s',CPID='%s' where fid = '%s' ",
+		VideoRate, MoovOffset, SegIndex, Proprietary,
+		Duration, Container, TotalBitrate, Resolution,
+		AudioCodec, VideoCodec, VideoFPS, AudioFPS,
+		AudioRate, rawname, iseq, MediaName, CPID, shot_fid)
+	this.commit_db(db, query)
+	return nil
 }

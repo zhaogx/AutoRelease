@@ -9,9 +9,14 @@ type SqlServerConf struct {
 }
 
 type GlobalConf struct {
-	WebServerBaseDir  string
-	ShotServerBaseDir string
-	LocalSqlServer    SqlServerConf
+	PLATERRORINTERFACE  string
+	PLATINTERFACE       string
+	WebServerBaseDir    string
+	ShotServerBaseDir   string
+	UploadServerBaseDir string
+	LocalSqlServer      SqlServerConf
+	GlCenSqlServer      SqlServerConf
+	OnLineSqlServer     SqlServerConf
 }
 
 type WebServerConf struct {
@@ -25,14 +30,22 @@ type WebServerConf struct {
 }
 
 type ShotServerConf struct {
-	FfmpegPath string
-	Threadnum  uint32
+	FfmpegPath   string
+	Threadnum    uint32
+	LoopInterval uint32
+}
+
+type UploadServerConf struct {
+	VendownName  string
+	Threadnum    uint32
+	LoopInterval uint32
 }
 
 type ServerConfig struct {
-	Global     GlobalConf
-	WebServer  WebServerConf
-	ShotServer ShotServerConf
+	Global       GlobalConf
+	WebServer    WebServerConf
+	ShotServer   ShotServerConf
+	UploadServer UploadServerConf
 }
 
 /*

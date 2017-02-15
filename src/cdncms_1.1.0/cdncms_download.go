@@ -18,9 +18,10 @@ type DownloadMgmt struct {
 	conf    *WebServerConf "config"
 }
 
-func DownloadMgmtInit(pconf *ServerConfig) *DownloadMgmt {
+func DownloadMgmtInit(pconf *ServerConfig, ret chan bool) {
 	if pconf == nil {
-		return nil
+		ret <- false
+		return
 	}
 	mgmt := new(DownloadMgmt)
 
@@ -38,13 +39,14 @@ func DownloadMgmtInit(pconf *ServerConfig) *DownloadMgmt {
 	db, err := sql.Open("mysql", dburl)
 	if err != nil {
 		VLOG(VLOG_ERROR, "sql open failed:%s", dburl)
-		return nil
+		ret <- false
+		return
 	}
 	mgmt.db = db
 	mgmt.ch_task = make(chan string, mgmt.conf.Threadnum)
 
 	mgmt.start()
-	return mgmt
+	ret <- true
 }
 
 func (this *DownloadMgmt) init_conf() {
@@ -60,6 +62,7 @@ func (this *DownloadMgmt) start() int {
 	for i := 0; i < int(this.conf.Threadnum); i++ {
 		go work(this)
 	}
+	var log_flag bool = true
 	for {
 		query := fmt.Sprintf("select fid from content_notify_seek where status = 0 limit 0,%d", this.conf.Threadnum)
 		rows, err := this.db.Query(query)
@@ -67,7 +70,16 @@ func (this *DownloadMgmt) start() int {
 			VLOG(VLOG_ERROR, "%s[FAILED]", query)
 			goto next
 		}
-		VLOG(VLOG_MSG, "%s[SUCCEED]", query)
+		if false == rows.Next() {
+			if log_flag {
+				VLOG(VLOG_MSG, "%s[SUCCEED] waitting data ....", query)
+				log_flag = false
+			}
+		} else {
+			VLOG(VLOG_MSG, "%s[SUCCEED]", query)
+			log_flag = true
+		}
+
 		for rows.Next() {
 			var fid string
 			err := rows.Scan(&fid)
@@ -82,6 +94,7 @@ func (this *DownloadMgmt) start() int {
 
 			this.ch_task <- fid
 		}
+
 	next:
 		if rows != nil {
 			rows.Close()
