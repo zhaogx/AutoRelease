@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -59,25 +61,25 @@ func tcp_client() {
 
 type web_server_t struct {
 	/*
-		WebServer struct {
-			Host  string
-			Port  string
-			Bool  bool
-			Mysql struct {
-				Host     string
-				Port     uint16
-				User     string
-				Password string
-				Name     string
+		webserver struct {
+			host  string
+			port  string
+			bool  bool
+			mysql struct {
+				host     string
+				port     uint16
+				user     string
+				password string
+				name     string
 			}
-			Errcbhost_3rd string
-			Threadnum     int
+			errcbhost_3rd string
+			threadnum     int
 		}
 	*/
-	ScanServer struct {
-		Host string
-		Port uint16
-		Path string
+	scanserver struct {
+		host string
+		port uint16
+		path string
 	}
 }
 
@@ -86,13 +88,106 @@ func WalkFunc(path string, info os.FileInfo, err error) error {
 	return err
 }
 
+func error_test_func() error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("recover[%s]\n", r)
+		}
+	}()
+	panic(errors.New("panic test"))
+	return fmt.Errorf("%s[%d]", "fmt test error", 10)
+	return errors.New("test error, hello world")
+}
+
+func go_func(c chan bool) {
+	time.Sleep(time.Second * 1)
+	fmt.Println("before in...")
+	c <- true
+	fmt.Println("finish in...")
+}
+
 func main() {
 
 	Vlog_init("Log.json")
 	{
-		os.RemoveAll("test*")
+		c := make(chan bool)
+		go go_func(c)
+		time.Sleep(time.Second * 3)
+		fmt.Println("before out...")
+		<-c
+		fmt.Println("finish out...")
+		time.Sleep(time.Second * 3)
+		return
 	}
-	return
+	{
+		dburl := "root:mysql*()@tcp(10.5.6.155:3306)/voole?allowOldPasswords=1"
+		db, err := sql.Open("mysql", dburl)
+		if err != nil {
+			VLOG(VLOG_ERROR, "sql open failed:%s[%s]", dburl, err.Error())
+			return
+		}
+		VLOG(VLOG_MSG, "sql open succeed [%s]", dburl)
+
+		query := "select name from test_table where id = 10"
+		rows, err := db.Query(query)
+		if err != nil {
+			VLOG(VLOG_ERROR, "[%s][failed][%s]", query, err.Error())
+			return
+		}
+		if false == rows.Next() {
+			VLOG(VLOG_ERROR, "[%s][failed]", query)
+		}
+		for rows.Next() {
+			var id uint32
+			var name string
+			rows.Scan(&id, &name)
+			VLOG(VLOG_MSG, "result:[%d:%s]", id, name)
+		}
+		VLOG(VLOG_MSG, "finished.......")
+
+		query = "select count(*) from test_table"
+		rows, err = db.Query(query)
+		if err != nil {
+			VLOG(VLOG_ERROR, "[%s][failed][%s]", query, err.Error())
+			return
+		}
+		for rows.Next() {
+			var count uint32
+			rows.Scan(&count)
+			VLOG(VLOG_MSG, "result:[%d]", count)
+		}
+
+		query = "SET NAMES latin1"
+		tx, _ := db.Begin()
+		_, err = tx.Exec(query)
+		if err != nil {
+			VLOG(VLOG_ERROR, "[%s] failed", query)
+		} else {
+			VLOG(VLOG_MSG, "[%s] succeed", query)
+		}
+		tx.Commit()
+
+		query = "select * from test_table"
+		rows, err = db.Query(query)
+		if err != nil {
+			VLOG(VLOG_ERROR, "[%s][failed][%s]", query, err.Error())
+			return
+		}
+		for rows.Next() {
+			var id string
+			var name string
+			rows.Scan(&id, &name)
+			VLOG(VLOG_MSG, "result:[%s:%s]", id, name)
+		}
+		VLOG(VLOG_MSG, "finished.......")
+
+		return
+	}
+	{
+		e := error_test_func()
+		fmt.Printf("%s\n", e)
+		return
+	}
 	filepath.Walk("/tmp", WalkFunc)
 	return
 	var str_slice = []string{"hello", "test", "world"}
