@@ -1,9 +1,7 @@
 package main
 
 import (
-	_ "fmt"
 	"os"
-	_ "os/exec"
 	. "utils"
 )
 
@@ -54,6 +52,10 @@ func init_dir(conf *ServerConfig) bool {
 
 func main() {
 	var conf ServerConfig
+
+	if false == deamon() {
+		return
+	}
 
 	//lock := make(chan int)
 	//defer close(lock)

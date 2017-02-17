@@ -45,15 +45,10 @@ func CdncmsShotMgmtInit(pconf *ServerConfig, ret chan bool) {
 		return
 	}
 	mgmt.db_cen, err = mgmt.initDb(&mgmt.gconf.GlCenSqlServer)
-	if err != nil {
-		mgmt.db_local.Close()
-		ret <- false
-		return
-	}
 	mgmt.db_online, err = mgmt.initDb(&mgmt.gconf.OnLineSqlServer)
-	if err != nil {
+
+	if mgmt.db_cen == nil && mgmt.db_online == nil {
 		mgmt.db_local.Close()
-		mgmt.db_cen.Close()
 		ret <- false
 		return
 	}
@@ -80,6 +75,10 @@ func (this *CdncmsShotMgmt) init_conf() {
 func (this *CdncmsShotMgmt) initDb(pconf *SqlServerConf) (*sql.DB, error) {
 	if pconf == nil {
 		return nil, errors.New("init db. pconf is nil")
+	}
+
+	if len(pconf.User) <= 0 || len(pconf.Password) <= 0 || len(pconf.Host) <= 0 || len(pconf.Name) <= 0 {
+		return nil, errors.New("db info error")
 	}
 
 	dburl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?allowOldPasswords=1",
@@ -134,6 +133,7 @@ func (this *CdncmsShotMgmt) taskDistribute() error {
 		for k, v := range this.file_map {
 			if v == false {
 				mp4_fid = k
+				this.file_map[k] = true
 				break
 			}
 		}
@@ -311,25 +311,29 @@ func (this *CdncmsShotMgmt) select_db(mp4_fid string) (*sql.DB, error) {
 	}
 
 	query := fmt.Sprintf("select fid from resource where fid = '%s'", mp4_fid)
-	rows, err := this.db_cen.Query(query)
-	if err != nil {
-		VLOG(VLOG_ERROR, "%s[FAILED]", query)
-	} else {
-		flag := rows.Next()
-		rows.Close()
-		if flag {
-			return this.db_cen, nil
+
+	if this.db_cen != nil {
+		rows, err := this.db_cen.Query(query)
+		if err != nil {
+			VLOG(VLOG_ERROR, "%s[FAILED]", query)
+		} else {
+			flag := rows.Next()
+			rows.Close()
+			if flag {
+				return this.db_cen, nil
+			}
 		}
 	}
-
-	rows, err = this.db_online.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("[%s][FAILED]", query)
-	} else {
-		flag := rows.Next()
-		rows.Close()
-		if flag {
-			return this.db_online, nil
+	if this.db_online != nil {
+		rows, err := this.db_online.Query(query)
+		if err != nil {
+			return nil, fmt.Errorf("[%s][FAILED]", query)
+		} else {
+			flag := rows.Next()
+			rows.Close()
+			if flag {
+				return this.db_online, nil
+			}
 		}
 	}
 	return nil, fmt.Errorf("[%s] can not found %s from resource", query)

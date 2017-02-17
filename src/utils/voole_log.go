@@ -31,24 +31,31 @@ type config struct {
 	Log_path  string
 }
 
-var cf config
+var log_cf config
 var log_init_succeed uint8 = 0
 var g_log_file *os.File = nil
 
+func log_create_dir(dir string) bool {
+	_, err := os.Stat(dir)
+	if err != nil {
+		err = os.MkdirAll(log_cf.Log_path, 0777)
+		if err != nil {
+			fmt.Println("[Vlog_init]make dir failed.", log_cf.Log_path)
+			return false
+		}
+	}
+	return true
+}
+
 func Vlog_init(conf_path string) int {
 	var err error
-	err = ReadConfig(conf_path, &cf)
+	err = ReadConfig(conf_path, &log_cf)
 	if err != nil {
 		fmt.Println("[Vlog_init]read config file failed")
 		goto exit
 	}
-	_, err = os.Stat(cf.Log_path)
-	if err != nil {
-		err = os.MkdirAll(cf.Log_path, 0777)
-		if err != nil {
-			fmt.Println("[Vlog_init]make dir failed.", cf.Log_path)
-			goto exit
-		}
+	if false == log_create_dir(log_cf.Log_path) {
+		goto exit
 	}
 	log_init_succeed = 1
 	return 0
@@ -64,7 +71,7 @@ func Vlog_set_level(level int) int {
 	if level > VLOG_DEBUG {
 		level = VLOG_DEBUG
 	}
-	cf.Log_level = level
+	log_cf.Log_level = level
 	return 0
 }
 
@@ -77,6 +84,9 @@ func Vlog_destory() {
 }
 
 func VLOG(level int, format string, a ...interface{}) {
+	if false == log_create_dir(log_cf.Log_path) {
+		return
+	}
 	prefix, ok := log_prefix(level)
 	if ok == false {
 		return
@@ -89,6 +99,9 @@ func VLOG(level int, format string, a ...interface{}) {
 }
 
 func VLOG_LINE(level int, a ...interface{}) {
+	if false == log_create_dir(log_cf.Log_path) {
+		return
+	}
 	prefix, ok := log_prefix(level)
 	if ok == false {
 		return
@@ -105,13 +118,13 @@ func VLOG_LINE(level int, a ...interface{}) {
 func log_prefix(level int) (string, bool) {
 	var err error
 	var full_name string
-	if cf.Log_level <= 0 || cf.Log_level < level || log_init_succeed == 0 {
+	if log_cf.Log_level <= 0 || log_cf.Log_level < level || log_init_succeed == 0 {
 		return "", false
 	}
 
 	t := time.Now()
 	fname := fmt.Sprintf("%04d_%02d_%02d.log", t.Year(), t.Month(), t.Day())
-	full_name = cf.Log_path + "/" + fname
+	full_name = log_cf.Log_path + "/" + fname
 
 	_, err = os.Stat(full_name)
 	if err != nil {
